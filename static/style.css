@@ -1,7 +1,18 @@
 body {
 	margin: 0;
+	background-color: #222;
+	color: #ccc;
+	font-family: Arimo;
+}
+
+input {
+	background-color: #222;
+	color: #ccc;
+	border: 1px solid #ccc;
+	border-radius: 9.0rem;
+	padding: 0.2rem 0.7rem;
 }
 
 .red {
-	background-color: blue;
+	background-color: #333;
 }
