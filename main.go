@@ -59,15 +59,11 @@ func getClaims(c echo.Context) (*jwtCustomClaims, error) {
 	return claims, nil
 }
 
-func login(c echo.Context) error {
-	username := c.FormValue("username")
-	password := c.FormValue("password")
-
+func auth(username, password string) (*jwtCustomClaims, error) {
 	// Unauthorized error
 	if username != "jon" || password != "shhh!" {
-		return echo.ErrUnauthorized
+		return nil, echo.ErrUnauthorized
 	}
-
 	// Set custom claims
 	claims := &jwtCustomClaims{
 		username,
@@ -78,6 +74,17 @@ func login(c echo.Context) error {
 		jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
 		},
+	}
+	return claims, nil
+}
+
+func login(c echo.Context) error {
+	username := c.FormValue("username")
+	password := c.FormValue("password")
+
+	claims, err := auth(username, password)
+	if err != nil {
+		return err
 	}
 
 	// Create token with claims
