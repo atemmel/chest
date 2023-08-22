@@ -5,6 +5,9 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"path"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,10 +18,36 @@ import (
 
 var mySecret = []byte("secret")
 
+const (
+	AdminGroup = "admin"
+	UserGroup = "user"
+	AnyGroup = ""
+
+	templateDir = "templates/"
+	partsDir = "templates/parts/"
+)
+
 type jwtCustomClaims struct {
 	Username  string `json:"name"`
 	Groups []string   `json:"groups"`
 	jwt.RegisteredClaims
+}
+
+type pageMetadata struct {
+	accessGroup string
+}
+
+var pageMetadataMap = map[string]pageMetadata {
+	"/index": {
+		accessGroup: AnyGroup,
+	},
+	"/upload": {
+		accessGroup: UserGroup,
+	},
+}
+
+var redirects = map[string]string {
+	"/": "/index",
 }
 
 type renderer struct {
@@ -26,12 +55,36 @@ type renderer struct {
 	hotReload bool
 }
 
+func NewRenderer(pageMetadataMap map[string]pageMetadata, hotReload bool) *renderer {
+	parts, err := filepath.Glob(partsDir + "*.html")
+	if err != nil {
+		panic(err)
+	}
+	pages := make([]string, 0, len(pageMetadataMap) + len(parts))
+	pages = append(pages, parts...)
+	for k := range pageMetadataMap {
+		p := path.Join(templateDir, k + ".html")
+		pages = append(pages, p)
+	}
+	
+	return &renderer{
+		templates: template.Must(template.ParseFiles(pages...)),
+		hotReload: hotReload,
+	}
+}
+
 func (r *renderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
 	if !r.hotReload {
 		return r.templates.ExecuteTemplate(w, name, data)
 	}
 
-	tpl, err := template.ParseFiles("template/" + name)
+	parts, err := filepath.Glob(partsDir + "*.html")
+	if err != nil {
+		return err
+	}
+	parts = append(parts, templateDir + name)
+
+	tpl, err := template.ParseFiles(parts...)
 	if err != nil {
 		return err
 	}
@@ -68,8 +121,8 @@ func auth(username, password string) (*jwtCustomClaims, error) {
 	claims := &jwtCustomClaims{
 		username,
 		[]string{
-			"admin",
-			"user",
+			AdminGroup,
+			UserGroup,
 		},
 		jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
@@ -120,28 +173,38 @@ func logout(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/")
 }
 
-func index(c echo.Context) error {
+func lookup(path string) string {
+	redirect, ok := redirects[path]
+	if ok {
+		path = redirect
+	}
+	return strings.Trim(path, "/")
+}
+
+func visit(c echo.Context) error {
 	claims, err := getClaims(c)
 	if err != nil {
 		return err
 	}
 	fmt.Println("claims:", claims)
-	return c.Render(http.StatusOK, "index.html", claims)
+	path := lookup(c.Path())
+	fmt.Println("visiting:", path)
+	return c.Render(http.StatusOK, path + ".html", claims)
 }
 
+/*
 func restricted(c echo.Context) error {
 	user := c.Get("user").(*jwt.Token)
 	claims := user.Claims.(*jwtCustomClaims)
 	name := claims.Username
 	return c.String(http.StatusOK, "Welcome "+name+"!")
 }
+*/
 
 func main() {
+
 	e := echo.New()
-	e.Renderer = &renderer{
-		templates: template.Must(template.ParseGlob("template/*.html")),
-		hotReload: true,
-	}
+	e.Renderer = NewRenderer(pageMetadataMap, true)
 
 	// Middleware
 	middleware.DefaultLoggerConfig.Format = 
@@ -149,7 +212,12 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	e.GET("/", index)
+	for k := range pageMetadataMap {
+		e.GET(k, visit)
+	}
+	for k := range redirects {
+		e.GET(k, visit)
+	}
 	e.Static("/static", "static")
 
 	e.POST("/login", login)

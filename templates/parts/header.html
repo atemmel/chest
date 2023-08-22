@@ -1,0 +1,25 @@
+{{ define "header" }}
+<header>
+  <nav>
+    <a href="/">
+      <div class="nav-element">
+        Chest
+      </div>
+    </a>
+    {{if .}}
+    <div class="nav-right">
+      <a href="/upload">
+        <div class="nav-element">
+          Upload
+        </div>
+      </a>
+      <a href="/profile">
+        <div class="nav-element">
+          Profile
+        </div>
+      </a>
+    </div>
+    {{ end }}
+  </nav>
+</header>
+{{ end }}

@@ -1,0 +1,45 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    {{ template "head" .}}
+    <title>home - chest</title>
+  </head>
+  <body>
+    {{ template "header" . }}
+    <main>
+      {{if not .}}
+      <div class="squish">
+        <div class="form-wrapper">
+        <form action="login" method="POST">
+          <div>
+            <label for="username">Username:</label><br>
+          </div>
+          <div>
+            <input type="text" id="username" name="username"><br>
+          </div>
+          <div>
+            <label for="password">Password:</label><br>
+          </div>
+          <div>
+            <input type="password" id="password" name="password">
+          </div>
+          <div>
+            <input type="submit" value="Login">
+          </div>
+        </form>
+        <div>
+      </div>
+      {{else}}
+        Logged in as {{.Username}}
+        <div>
+          <a href="/upload">Upload</a>
+        </div>
+        <form action="logout" method="POST">
+          <div>
+            <input type="submit" value="Logout">
+          </div>
+        </form>
+      {{end}}
+    </main>
+  </body>
+</html>
