@@ -1,10 +1,28 @@
 <!DOCTYPE HTML>
 <html>
   <head>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Arimo">
-   <link rel="stylesheet" href="/static/style.css">
+    {{ template "head" .}}
+    <title>upload file - chest</title>
   </head>
   <body>
-    wajkasldkjah
+    {{ template "header" . }}
+    <main>
+      <form action="upload" method="POST">
+        <div>
+          <input type="file">
+        </div>
+        <div>
+          <select name="group">
+            <option value="">any</option>
+            {{ range $group := .Groups }}
+            <option value="{{$group}}">{{$group}}</option>
+            {{ end }}
+          </select>
+        </div>
+        <div>
+          <input type="submit" value="Upload file">
+        </div>
+      </form>
+    </main>
   </body>
 </html>
