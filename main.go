@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/gob"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -8,10 +10,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	//echojwt "github.com/labstack/echo-jwt/v4"
+	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -27,14 +27,12 @@ const (
 	partsDir = "templates/parts/"
 )
 
-type jwtCustomClaims struct {
-	Username  string `json:"name"`
-	Groups []string   `json:"groups"`
-	jwt.RegisteredClaims
-}
-
 type pageMetadata struct {
 	accessGroup string
+}
+
+type sessionData struct {
+	Id Id
 }
 
 var pageMetadataMap = map[string]pageMetadata {
@@ -49,6 +47,8 @@ var pageMetadataMap = map[string]pageMetadata {
 var redirects = map[string]string {
 	"/": "/index",
 }
+
+var store = sessions.NewCookieStore(mySecret)
 
 type renderer struct {
 	templates *template.Template
@@ -91,89 +91,75 @@ func (r *renderer) Render(w io.Writer, name string, data interface{}, c echo.Con
     return tpl.ExecuteTemplate(w, name, data)
 }
 
-func getClaims(c echo.Context) (*jwtCustomClaims, error) {
-	cookie, err := c.Cookie("auth")
-	if err != nil || cookie == nil {
-		return nil, nil
-	}
-	token, err := jwt.ParseWithClaims(cookie.Value, &jwtCustomClaims{}, func(token *jwt.Token) (interface{}, error) {
-		// Validate that the algorithm is what you expect:
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-		}
-		return mySecret, nil
-	})
-
+func authenticate(c echo.Context) (*User, error) {
+	session, err := store.Get(c.Request(), "session")
 	if err != nil {
 		return nil, err
 	}
-
-	claims := token.Claims.(*jwtCustomClaims)
-	return claims, nil
-}
-
-func auth(username, password string) (*jwtCustomClaims, error) {
-	// Unauthorized error
-	if username != "jon" || password != "shhh!" {
-		return nil, echo.ErrUnauthorized
+	var data *sessionData
+	var user *User
+	value, ok := session.Values["user"]
+	if !ok {
+		return nil, nil
 	}
-	// Set custom claims
-	claims := &jwtCustomClaims{
-		username,
-		[]string{
-			AdminGroup,
-			UserGroup,
-		},
-		jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
-		},
+	data, ok = value.(*sessionData)
+	if !ok {
+		return nil, errors.New("Illegal session state")
 	}
-	return claims, nil
+	user = LookupId(data.Id)
+	if user == nil {
+		return nil, nil
+	}
+	return user, nil
 }
 
 func login(c echo.Context) error {
+	r := c.Request()
+	w := c.Response().Writer
+
 	username := c.FormValue("username")
 	password := c.FormValue("password")
 
-	claims, err := auth(username, password)
+	user, err := Login(username, password)
 	if err != nil {
 		return err
 	}
 
-	// Create token with claims
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	//TODO: use actual secret
-	t, err := token.SignedString(mySecret)
+	session, err := store.Get(r, "session")
 	if err != nil {
 		return err
 	}
 
-	cookie := &http.Cookie{
-        Name:     "auth",
-        Value:    t,
-        Path:     "/",
-        MaxAge:   3600,
-        HttpOnly: true,
-        Secure:   true,
-        SameSite: http.SameSiteLaxMode,
-    }
+	session.Options.MaxAge = 86400 * 7 // one week
+	data := &sessionData{
+		Id: user.Id,
+	}
+	
+	session.Values["user"] = data
+	err = session.Save(r, w)
+	if err != nil {
+		return err
+	}
 
-	c.SetCookie(cookie)
 	return c.Redirect(http.StatusSeeOther, "/")
 }
 
 func logout(c echo.Context) error {
-	cookie, err := c.Cookie("auth")
+	r := c.Request()
+	w := c.Response().Writer
+	session, err := store.Get(r, "session")
 	if err != nil {
 		return err
 	}
-	cookie.Expires = time.Now()
-	c.SetCookie(cookie)
+	session.Options.MaxAge = -1
+	err = session.Save(r, w)
+	if err != nil {
+		return err
+	}
 	return c.Redirect(http.StatusSeeOther, "/")
 }
 
-func lookup(path string) string {
+func lookupRequest(path string) string {
 	redirect, ok := redirects[path]
 	if ok {
 		path = redirect
@@ -182,26 +168,20 @@ func lookup(path string) string {
 }
 
 func visit(c echo.Context) error {
-	claims, err := getClaims(c)
+	user, err := authenticate(c)
 	if err != nil {
 		return err
 	}
-	fmt.Println("claims:", claims)
-	path := lookup(c.Path())
+	fmt.Println("user:", user)
+	path := lookupRequest(c.Path())
 	fmt.Println("visiting:", path)
-	return c.Render(http.StatusOK, path + ".html", claims)
+	return c.Render(http.StatusOK, path + ".html", user)
 }
-
-/*
-func restricted(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*jwtCustomClaims)
-	name := claims.Username
-	return c.String(http.StatusOK, "Welcome "+name+"!")
-}
-*/
 
 func main() {
+	gob.Register(&sessionData{})
+	Register("asdf", "qwer", []string{"admin", "user", "any"})
+	fmt.Println("db:", fakeDb)
 
 	e := echo.New()
 	e.Renderer = NewRenderer(pageMetadataMap, true)
