@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/gob"
 	"errors"
-	"fmt"
 	"html/template"
 	"io"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -53,6 +53,10 @@ var store = sessions.NewCookieStore(mySecret)
 type renderer struct {
 	templates *template.Template
 	hotReload bool
+}
+
+type renderState struct {
+	User *User
 }
 
 func NewRenderer(pageMetadataMap map[string]pageMetadata, hotReload bool) *renderer {
@@ -145,6 +149,13 @@ func login(c echo.Context) error {
 }
 
 func logout(c echo.Context) error {
+	u, err := authenticate(c)
+	if err != nil {
+		return err
+	}
+	if u == nil {
+		return c.NoContent(http.StatusForbidden)
+	}
 	r := c.Request()
 	w := c.Response().Writer
 	session, err := store.Get(r, "session")
@@ -157,6 +168,62 @@ func logout(c echo.Context) error {
 		return err
 	}
 	return c.Redirect(http.StatusSeeOther, "/")
+}
+
+func forbidden(c echo.Context) (*User, error) {
+	u, err := authenticate(c)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return nil, c.NoContent(http.StatusForbidden)
+	}
+	return u, nil
+}
+
+func upload(c echo.Context) error {
+	u, err := forbidden(c)
+	if err != nil {
+		return err
+	}
+	r := c.Request()
+	const max = 5_368_709_120
+	err = r.ParseMultipartForm(max)
+	if err != nil {
+		return err
+	}
+
+	//TODO: validate group is ok
+	group := r.PostFormValue("group")
+	_ = group
+	_ = u
+
+	parts := r.MultipartForm.File["file"]
+	//TODO: make sure name is cleaned 
+	name := parts[0].Filename
+
+	file, err := os.Create(path.Join("files", name))
+	if err != nil {
+		return err
+	}
+	defer file.Close() //TODO: handle error
+
+	for _, part := range parts {
+		p, err := part.Open()
+		if err != nil {
+			return err
+		}
+		defer p.Close() //TODO: handle error
+		bytes, err := io.ReadAll(p)
+		if err != nil {
+			return err
+		}
+		_, err = file.Write(bytes)
+		if err != nil {
+			return err
+		}
+	}
+	return c.Redirect(http.StatusSeeOther, "/upload")
 }
 
 func lookupRequest(path string) string {
@@ -172,16 +239,13 @@ func visit(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("user:", user)
 	path := lookupRequest(c.Path())
-	fmt.Println("visiting:", path)
 	return c.Render(http.StatusOK, path + ".html", user)
 }
 
 func main() {
 	gob.Register(&sessionData{})
 	Register("asdf", "qwer", []string{"admin", "user", "any"})
-	fmt.Println("db:", fakeDb)
 
 	e := echo.New()
 	e.Renderer = NewRenderer(pageMetadataMap, true)
@@ -202,21 +266,7 @@ func main() {
 
 	e.POST("/login", login)
 	e.POST("/logout", logout)
-
-	/*
-	// Restricted group
-	r := e.Group("/api")
-
-	// Configure middleware with the custom claims type
-	config := echojwt.Config{
-		NewClaimsFunc: func(c echo.Context) jwt.Claims {
-			return new(jwtCustomClaims)
-		},
-		SigningKey: []byte("secret"),
-	}
-	r.Use(echojwt.WithConfig(config))
-	r.GET("", restricted)
-	*/
+	e.POST("/upload", upload)
 
 	e.Logger.Fatal(e.Start(":8080"))
 }

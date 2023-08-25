@@ -7,13 +7,15 @@
   <body>
     {{ template "header" . }}
     <main>
-      <form action="upload" method="POST">
+      <form action="upload" method="POST" enctype="multipart/form-data">
         <div>
-          <input type="file">
+          <input type="text" name="name" placeholder="name">
+        </div>
+        <div>
+          <input type="file" name="file">
         </div>
         <div>
           <select name="group">
-            <option value="">any</option>
             {{ range $group := .Groups }}
             <option value="{{$group}}">{{$group}}</option>
             {{ end }}
