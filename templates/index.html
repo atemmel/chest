@@ -7,7 +7,7 @@
   <body>
     {{ template "header" . }}
     <main>
-      {{if not .}}
+      {{if not .User}}
       <div class="squish">
         <div class="form-wrapper">
         <form action="login" method="POST">
@@ -29,17 +29,42 @@
         </form>
         <div>
       </div>
-      {{else}}
-        Logged in as {{.Username}}
-        <div>
-          <a href="/upload">Upload</a>
+      {{ else }}
+
+        <div class="file-navigation">
+          {{ .Path }}
         </div>
-        <form action="logout" method="POST">
+        {{ if .File }}
           <div>
-            <input type="submit" value="Logout">
+            <div>
+              {{ .File.Name }}
+            </div>
+            <div>
+              {{ .File.Mime }}
+            </div>
           </div>
-        </form>
-      {{end}}
+        {{ else }}
+          <div class="grid">
+            {{ $Path := .Path }}
+            {{ range $f := .Entries }}
+              <div class="grid-element">
+                <a href="files{{ $Path }}{{ $f.Name }}">
+                  <div class="grid-element-text-icon">
+                    {{ if $f.IsDir }}
+                        📁
+                    {{ else }}
+                      📄
+                    {{ end }}
+                  </div>
+                  <div class="grid-element-filename">
+                    {{ $f.Name }}
+                  </div>
+                </a>
+              </div>
+            {{ end }}
+          </div>
+        {{ end }}
+      {{ end }}
     </main>
   </body>
 </html>

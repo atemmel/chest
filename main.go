@@ -42,6 +42,9 @@ var pageMetadataMap = map[string]pageMetadata {
 	"/upload": {
 		accessGroup: UserGroup,
 	},
+	"/profile": {
+		accessGroup: UserGroup,
+	},
 }
 
 var redirects = map[string]string {
@@ -57,6 +60,9 @@ type renderer struct {
 
 type renderState struct {
 	User *User
+	Path string
+	Entries []fileEntry
+	File *fileEntry
 }
 
 func NewRenderer(pageMetadataMap map[string]pageMetadata, hotReload bool) *renderer {
@@ -78,6 +84,7 @@ func NewRenderer(pageMetadataMap map[string]pageMetadata, hotReload bool) *rende
 }
 
 func (r *renderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+
 	if !r.hotReload {
 		return r.templates.ExecuteTemplate(w, name, data)
 	}
@@ -239,8 +246,37 @@ func visit(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+
+	entries, file := readFiles(c.Path())
+
+	state := &renderState{
+		User: user,
+		Path: c.Path(),
+		Entries: entries,
+		File: file,
+	}
+
 	path := lookupRequest(c.Path())
-	return c.Render(http.StatusOK, path + ".html", user)
+	return c.Render(http.StatusOK, path + ".html", state)
+}
+
+func files(c echo.Context) error {
+	user, err := forbidden(c)
+	if err != nil {
+		return err
+	}
+
+	path := c.Request().URL.EscapedPath()[1:]
+	entries, file := readFiles(path)
+
+	state := &renderState{
+		User: user,
+		Path: path,
+		Entries: entries,
+		File: file,
+	}
+
+	return c.Render(http.StatusOK, "index.html", state)
 }
 
 func main() {
@@ -263,7 +299,7 @@ func main() {
 		e.GET(k, visit)
 	}
 	e.Static("/static", "static")
-
+	e.GET("/files/*", files);
 	e.POST("/login", login)
 	e.POST("/logout", logout)
 	e.POST("/upload", upload)

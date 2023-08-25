@@ -1,0 +1,20 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    {{ template "head" .}}
+    <title>profile - chest</title>
+  </head>
+  <body>
+    {{ template "header" . }}
+    <main>
+      {{if .User}}
+        Logged in as {{.User.Username}}
+        <form action="logout" method="POST">
+          <div>
+            <input type="submit" value="Logout">
+          </div>
+        </form>
+      {{end}}
+    </main>
+  </body>
+</html>

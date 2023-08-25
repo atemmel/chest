@@ -5,7 +5,7 @@
     <title>upload file - chest</title>
   </head>
   <body>
-    {{ template "header" . }}
+    {{ template "header" .}}
     <main>
       <form action="upload" method="POST" enctype="multipart/form-data">
         <div>
@@ -16,7 +16,7 @@
         </div>
         <div>
           <select name="group">
-            {{ range $group := .Groups }}
+            {{ range $group := .User.Groups }}
             <option value="{{$group}}">{{$group}}</option>
             {{ end }}
           </select>
