@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"mime"
 	"os"
 	"path"
@@ -57,7 +56,6 @@ func readFiles(where string) ([]fileEntry, *fileEntry) {
 	if err != nil {
 		info, err := os.Stat(fullPath)
 		if err != nil {
-			fmt.Println("a", err)
 			return []fileEntry{}, nil
 		}
 		return []fileEntry{}, &fileEntry{
@@ -75,6 +73,5 @@ func readFiles(where string) ([]fileEntry, *fileEntry) {
 		}
 	}
 	sort.Sort(byType(entries))
-			fmt.Println("c")
 	return entries, nil
 }

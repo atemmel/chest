@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
@@ -27,28 +26,8 @@ const (
 	partsDir = "templates/parts/"
 )
 
-type pageMetadata struct {
-	accessGroup string
-}
-
 type sessionData struct {
 	Id Id
-}
-
-var pageMetadataMap = map[string]pageMetadata {
-	"/index": {
-		accessGroup: AnyGroup,
-	},
-	"/upload": {
-		accessGroup: UserGroup,
-	},
-	"/profile": {
-		accessGroup: UserGroup,
-	},
-}
-
-var redirects = map[string]string {
-	"/": "/index",
 }
 
 var store = sessions.NewCookieStore(mySecret)
@@ -65,15 +44,15 @@ type renderState struct {
 	File *fileEntry
 }
 
-func NewRenderer(pageMetadataMap map[string]pageMetadata, hotReload bool) *renderer {
+func NewRenderer(files []string, hotReload bool) *renderer {
 	parts, err := filepath.Glob(partsDir + "*.html")
 	if err != nil {
 		panic(err)
 	}
-	pages := make([]string, 0, len(pageMetadataMap) + len(parts))
+	pages := make([]string, 0, len(files) + len(parts))
 	pages = append(pages, parts...)
-	for k := range pageMetadataMap {
-		p := path.Join(templateDir, k + ".html")
+	for _, f := range files {
+		p := path.Join(templateDir, f)
 		pages = append(pages, p)
 	}
 	
@@ -124,7 +103,7 @@ func authenticate(c echo.Context) (*User, error) {
 	return user, nil
 }
 
-func login(c echo.Context) error {
+func postLogin(c echo.Context) error {
 	r := c.Request()
 	w := c.Response().Writer
 
@@ -233,50 +212,70 @@ func upload(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/upload")
 }
 
-func lookupRequest(path string) string {
-	redirect, ok := redirects[path]
-	if ok {
-		path = redirect
+func login(c echo.Context) error {
+	user, _ := authenticate(c)
+	if user != nil {
+		return c.Redirect(http.StatusSeeOther, "/files")
 	}
-	return strings.Trim(path, "/")
+
+	return c.Render(http.StatusOK, "login.html", nil)
 }
 
-func visit(c echo.Context) error {
-	user, err := authenticate(c)
-	if err != nil {
-		return err
+// produces redirect lambda
+func redirect(to string) (func(echo.Context) error) {
+	return func(c echo.Context) error {
+		return c.Redirect(http.StatusSeeOther, to)
 	}
+}
 
-	entries, file := readFiles(c.Path())
+// produces auth lambda
+func auth(group string, proc func(*User, echo.Context) error) (func(echo.Context) error) {
+	return func(c echo.Context) error {
+		var user *User
+		var err error
 
-	state := &renderState{
+		if group == AnyGroup {
+			goto OK
+		}
+
+		user, err = authenticate(c)
+		if err != nil || user == nil {
+			return c.Redirect(http.StatusSeeOther, "/login")
+		}
+		if !user.PartOf(group) {
+			return c.NoContent(http.StatusForbidden)
+		}
+
+		OK:
+		return proc(user, c)
+	}
+}
+
+func render(template string, makeState func(*User, echo.Context) *renderState) (func(*User, echo.Context) error) {
+	return func(user *User, c echo.Context) error {
+		state := makeState(user, c)
+		return c.Render(http.StatusOK, template, state)
+	}
+}
+
+func defaultState(user *User, c echo.Context) *renderState {
+	return &renderState{
 		User: user,
-		Path: c.Path(),
-		Entries: entries,
-		File: file,
+		Path: "",
+		Entries: nil,
+		File: nil,
 	}
-
-	path := lookupRequest(c.Path())
-	return c.Render(http.StatusOK, path + ".html", state)
 }
 
-func files(c echo.Context) error {
-	user, err := forbidden(c)
-	if err != nil {
-		return err
-	}
-
+func filesState(user *User, c echo.Context) *renderState {
 	path := c.Request().URL.EscapedPath()[1:]
 	entries, file := readFiles(path)
-
-	state := &renderState{
+	return &renderState{
 		User: user,
 		Path: path,
 		Entries: entries,
 		File: file,
 	}
-
-	return c.Render(http.StatusOK, "index.html", state)
 }
 
 func main() {
@@ -284,25 +283,31 @@ func main() {
 	Register("asdf", "qwer", []string{"admin", "user", "any"})
 
 	e := echo.New()
-	e.Renderer = NewRenderer(pageMetadataMap, true)
 
-	// Middleware
 	middleware.DefaultLoggerConfig.Format = 
 		"${time_rfc3339} ${method}: ${uri} ${error}\n"
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	for k := range pageMetadataMap {
-		e.GET(k, visit)
-	}
-	for k := range redirects {
-		e.GET(k, visit)
-	}
 	e.Static("/static", "static")
-	e.GET("/files/*", files);
-	e.POST("/login", login)
+
+	e.GET("/", redirect("/files"))
+	e.GET("/files", auth(UserGroup, render("index.html", filesState)))
+	e.GET("/files/*", auth(UserGroup, render("index.html", filesState)))
+	e.GET("/upload", auth(UserGroup, render("profile.html", defaultState)))
+	e.GET("/profile", auth(UserGroup, render("profile.html", defaultState)))
+
+	e.GET("/login", login);
+	e.POST("/login", postLogin)
 	e.POST("/logout", logout)
 	e.POST("/upload", upload)
+
+	e.Renderer = NewRenderer([]string{
+		"login.html",
+		"index.html",
+		"upload.html",
+		"profile.html",
+	}, true)
 
 	e.Logger.Fatal(e.Start(":8080"))
 }

@@ -17,6 +17,15 @@ type User struct {
 	Username     string   `json:"name"`
 }
 
+func (u *User) PartOf(group string) bool {
+	for _, g := range u.Groups {
+		if g == group {
+			return true;
+		}
+	}
+	return false;
+}
+
 var inc Id = 0
 var fakeDb = []User{}
 
