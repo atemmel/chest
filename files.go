@@ -75,3 +75,12 @@ func readFiles(where string) ([]fileEntry, *fileEntry) {
 	sort.Sort(byType(entries))
 	return entries, nil
 }
+
+func Mkdir(name string) (string, error) {
+	if !strings.HasPrefix(name, "/files") {
+		name = path.Join("files", name)
+	} else {
+		name = name[1:]
+	}
+	return name, os.Mkdir(name, 0755)
+}

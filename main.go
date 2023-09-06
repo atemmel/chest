@@ -40,6 +40,7 @@ type renderer struct {
 type renderState struct {
 	User *User
 	Path string
+	ParentPath string
 	Entries []fileEntry
 	File *fileEntry
 }
@@ -212,6 +213,28 @@ func upload(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/upload")
 }
 
+func mkdir(c echo.Context) error {
+	u, err := forbidden(c)
+	_ = u
+	if err != nil {
+		return err
+	}
+	r := c.Request()
+	mkdirBase := r.PostFormValue("base")
+	mkdirName := r.PostFormValue("name")
+	mkdirGroup := r.PostFormValue("group")
+	//TODO: make sure user is allowed to create in group
+	_ = mkdirGroup //TODO
+
+	//TODO: make sure name does not exist
+	fullPath := path.Join(mkdirBase, mkdirName)
+	newPath, err := Mkdir(fullPath)
+	if err != nil {
+		return err
+	}
+	return c.Redirect(http.StatusSeeOther, "/" + newPath)
+}
+
 func login(c echo.Context) error {
 	user, _ := authenticate(c)
 	if user != nil {
@@ -267,12 +290,27 @@ func defaultState(user *User, c echo.Context) *renderState {
 	}
 }
 
-func filesState(user *User, c echo.Context) *renderState {
-	path := c.Request().URL.EscapedPath()[1:]
-	entries, file := readFiles(path)
+func mkdirState(user *User, c echo.Context) *renderState {
+	child := c.QueryParam("path")
+	if child == "" {
+		child = "/"
+	}
 	return &renderState{
 		User: user,
-		Path: "/" + path,
+		Path: child,
+		Entries: nil,
+		File: nil,
+	}
+}
+
+func filesState(user *User, c echo.Context) *renderState {
+	child := c.Request().URL.EscapedPath()[1:]
+	parent := path.Dir(child)
+	entries, file := readFiles(child)
+	return &renderState{
+		User: user,
+		Path: "/" + child,
+		ParentPath: "/" + parent,
 		Entries: entries,
 		File: file,
 	}
@@ -294,13 +332,15 @@ func main() {
 	e.GET("/", redirect("/files"))
 	e.GET("/files", auth(UserGroup, render("index.html", filesState)))
 	e.GET("/files/*", auth(UserGroup, render("index.html", filesState)))
-	e.GET("/upload", auth(UserGroup, render("profile.html", defaultState)))
+	e.GET("/upload", auth(UserGroup, render("upload.html", defaultState)))
 	e.GET("/profile", auth(UserGroup, render("profile.html", defaultState)))
+	e.GET("/mkdir", auth(UserGroup, render("mkdir.html", mkdirState)));
 
 	e.GET("/login", login);
 	e.POST("/login", postLogin)
 	e.POST("/logout", logout)
 	e.POST("/upload", upload)
+	e.POST("/mkdir", mkdir)
 
 	e.Renderer = NewRenderer([]string{
 		"login.html",

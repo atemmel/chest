@@ -12,6 +12,15 @@
           <div class="file-navigation">
             {{ .Path }}
           </div>
+          <div class="action-bar">
+            <div class="action-item" aria-description="Go back">
+              <a href="{{ .ParentPath }}">
+                <div>
+                  Back
+                </div>
+              </a>
+            </div>
+          </div>
           <div>
             <div>
               {{ .File.Name }}
@@ -23,6 +32,31 @@
         {{ else }}
           <div class="file-navigation">
             {{ .Path }}/
+          </div>
+          <div class="action-bar">
+            {{ if ne .ParentPath "/." }}
+              <div class="action-item" aria-description="Go back">
+                <a href="{{ .ParentPath }}">
+                  <div>
+                    Back
+                  </div>
+                </a>
+              </div>
+            {{ end }}
+            <div class="action-item" aria-description="New Folder">
+              <a href="/mkdir?path={{.Path}}">
+                <div>
+                  New Folder
+                </div>
+              </a>
+            </div>
+            <div class="action-item" aria-description="New File">
+              <a href="">
+                <div>
+                  New File
+                </div>
+              </a>
+            </div>
           </div>
           <div class="grid">
             {{ $Path := .Path }}

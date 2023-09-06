@@ -1,0 +1,29 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    {{ template "head" .}}
+    <title>upload file - chest</title>
+  </head>
+  <body>
+    {{ template "header" .}}
+    <main>
+      <form action="mkdir" method="POST">
+        <input type="hidden" name="base" value="{{.Path}}">
+        <div>
+          <input type="text" name="name" placeholder="Folder name">
+        </div>
+        <div>
+          Owning group:
+          <select name="group">
+            {{ range $group := .User.Groups }}
+              <option value="{{$group}}">{{$group}}</option>
+            {{ end }}
+          </select>
+        </div>
+        <div>
+          <input type="submit" value="Create folder">
+        </div>
+      </form>
+    </main>
+  </body>
+</html>
