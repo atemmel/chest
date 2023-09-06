@@ -8,10 +8,10 @@
     {{ template "header" . }}
     <main>
       {{ if .User }}
-        <div class="file-navigation">
-          {{ .Path }}
-        </div>
         {{ if .File }}
+          <div class="file-navigation">
+            {{ .Path }}
+          </div>
           <div>
             <div>
               {{ .File.Name }}
@@ -21,6 +21,9 @@
             </div>
           </div>
         {{ else }}
+          <div class="file-navigation">
+            {{ .Path }}/
+          </div>
           <div class="grid">
             {{ $Path := .Path }}
             {{ range $f := .Entries }}

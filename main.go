@@ -272,7 +272,7 @@ func filesState(user *User, c echo.Context) *renderState {
 	entries, file := readFiles(path)
 	return &renderState{
 		User: user,
-		Path: path,
+		Path: "/" + path,
 		Entries: entries,
 		File: file,
 	}
