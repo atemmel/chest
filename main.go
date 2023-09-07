@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"net/http"
@@ -235,12 +236,30 @@ func mkdir(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/" + newPath)
 }
 
+func download(c echo.Context) error {
+	u, err := forbidden(c)
+	//TODO: make sure user is allowed to download
+	_ = u
+	if err != nil {
+		return err
+	}
+	child := c.QueryParam("path")
+	fmt.Println("child", child)
+	if child == "" {
+		return c.NoContent(http.StatusNotFound)
+
+	}
+	//TODO: make sure file exists
+	child = child[1:]
+	filename := path.Base(child)
+	return c.Attachment(child, filename)
+}
+
 func login(c echo.Context) error {
 	user, _ := authenticate(c)
 	if user != nil {
 		return c.Redirect(http.StatusSeeOther, "/files")
 	}
-
 	return c.Render(http.StatusOK, "login.html", nil)
 }
 
@@ -335,6 +354,7 @@ func main() {
 	e.GET("/upload", auth(UserGroup, render("upload.html", defaultState)))
 	e.GET("/profile", auth(UserGroup, render("profile.html", defaultState)))
 	e.GET("/mkdir", auth(UserGroup, render("mkdir.html", mkdirState)));
+	e.GET("/download", download);
 
 	e.GET("/login", login);
 	e.POST("/login", postLogin)

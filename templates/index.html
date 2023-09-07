@@ -28,6 +28,11 @@
             <div>
               {{ .File.Mime }}
             </div>
+            <div>
+              <a href="/download?path={{ .Path }}">
+                Download
+              </a>
+            </div>
           </div>
         {{ else }}
           <div class="file-navigation">
