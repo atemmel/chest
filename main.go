@@ -216,7 +216,6 @@ func upload(c echo.Context) error {
 
 func mkdir(c echo.Context) error {
 	u, err := forbidden(c)
-	_ = u
 	if err != nil {
 		return err
 	}
@@ -224,12 +223,20 @@ func mkdir(c echo.Context) error {
 	mkdirBase := r.PostFormValue("base")
 	mkdirName := r.PostFormValue("name")
 	mkdirGroup := r.PostFormValue("group")
-	//TODO: make sure user is allowed to create in group
-	_ = mkdirGroup //TODO
+
+	meta, err := ReadMeta(mkdirBase)
+	if err != nil {
+		return err
+	}
+
+	// make sure user is allowed to create
+	if !u.PartOf(meta.Group) {
+		return c.NoContent(http.StatusForbidden)
+	}
 
 	//TODO: make sure name does not exist
 	fullPath := path.Join(mkdirBase, mkdirName)
-	newPath, err := Mkdir(fullPath)
+	newPath, err := Mkdir(fullPath, mkdirGroup)
 	if err != nil {
 		return err
 	}
@@ -238,20 +245,27 @@ func mkdir(c echo.Context) error {
 
 func download(c echo.Context) error {
 	u, err := forbidden(c)
-	//TODO: make sure user is allowed to download
-	_ = u
 	if err != nil {
 		return err
 	}
 	child := c.QueryParam("path")
-	fmt.Println("child", child)
 	if child == "" {
 		return c.NoContent(http.StatusNotFound)
 
 	}
-	//TODO: make sure file exists
 	child = child[1:]
 	filename := path.Base(child)
+	dir := path.Dir(child)
+	meta, err := ReadMeta(dir)
+	if err != nil {
+		return err
+	}
+
+	// make sure user is allowed to download
+	if !u.PartOf(meta.Group) {
+		return c.NoContent(http.StatusForbidden)
+	}
+
 	return c.Attachment(child, filename)
 }
 

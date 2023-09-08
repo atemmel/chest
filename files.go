@@ -1,12 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"mime"
 	"os"
 	"path"
 	"sort"
 	"strings"
 )
+
+const (
+	MetaFile = ".chest_meta"
+	HostDir = "files"
+)
+
+type ChestMeta struct {
+	Group string `json:"group"`
+}
 
 type fileEntry struct {
 	Name string
@@ -47,7 +57,7 @@ func getMime(fullPath string) string {
 }
 
 func readFiles(where string) ([]fileEntry, *fileEntry) {
-	prefix := "files"
+	prefix := HostDir
 	if strings.HasPrefix(where, prefix) {
 		prefix = ""
 	}
@@ -76,11 +86,43 @@ func readFiles(where string) ([]fileEntry, *fileEntry) {
 	return entries, nil
 }
 
-func Mkdir(name string) (string, error) {
-	if !strings.HasPrefix(name, "/files") {
-		name = path.Join("files", name)
+func ReadMeta(folder string) (*ChestMeta, error) {
+	bytes, err := os.ReadFile(path.Join(folder, MetaFile))
+	if err != nil {
+		return nil, err
+	}
+
+	meta := &ChestMeta{}
+	err = json.Unmarshal(bytes, meta)
+	if err != nil {
+		return nil, err
+	}
+
+	return meta, nil
+}
+
+func Mkdir(name string, group string) (string, error) {
+	if !strings.HasPrefix(name, "/" + HostDir) {
+		name = path.Join(HostDir, name)
 	} else {
 		name = name[1:]
+	}
+	err := os.Mkdir(name, 0755)
+	if err != nil {
+		return "", err
+	}
+
+	meta := &ChestMeta{
+		Group: group,
+	}
+	
+	bytes, err := json.Marshal(meta)
+	if err != nil {
+		return "", err
+	}
+	err = os.WriteFile(path.Join(name, MetaFile), bytes, 0644)
+	if err != nil {
+		return "", err
 	}
 	return name, os.Mkdir(name, 0755)
 }
