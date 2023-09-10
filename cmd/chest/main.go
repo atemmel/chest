@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"flag"
+	"fmt"
 	"html/template"
 	"io"
 	"net/http"
@@ -401,13 +402,15 @@ func main() {
 	e.POST("/upload", upload)
 	e.POST("/mkdir", mkdir)
 
-	hotReload := !debug
+	hotReload := debug
+	fmt.Println("Hot-reload is:", hotReload)
 
 	e.Renderer = NewRenderer([]string{
 		"login.html",
 		"index.html",
 		"upload.html",
 		"profile.html",
+		"mkdir.html",
 	}, hotReload)
 
 	e.Logger.Fatal(e.Start(":8080"))
