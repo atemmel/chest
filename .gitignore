@@ -1,2 +1,6 @@
 chest
+chest-cli
 files/
+!cmd/chest
+!cmd/chest-cli
+!pkg/files

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"chest/pkg/db"
+	"chest/pkg/files"
 	"encoding/gob"
 	"errors"
-	"fmt"
+	"flag"
 	"html/template"
 	"io"
 	"net/http"
@@ -28,7 +30,7 @@ const (
 )
 
 type sessionData struct {
-	Id Id
+	Id string
 }
 
 var store = sessions.NewCookieStore(mySecret)
@@ -39,11 +41,11 @@ type renderer struct {
 }
 
 type renderState struct {
-	User *User
+	User *db.User
 	Path string
 	ParentPath string
-	Entries []fileEntry
-	File *fileEntry
+	Entries []files.Entry
+	File *files.Entry
 }
 
 func NewRenderer(files []string, hotReload bool) *renderer {
@@ -83,13 +85,13 @@ func (r *renderer) Render(w io.Writer, name string, data interface{}, c echo.Con
     return tpl.ExecuteTemplate(w, name, data)
 }
 
-func authenticate(c echo.Context) (*User, error) {
+func authenticate(c echo.Context) (*db.User, error) {
 	session, err := store.Get(c.Request(), "session")
 	if err != nil {
 		return nil, err
 	}
 	var data *sessionData
-	var user *User
+	var user *db.User
 	value, ok := session.Values["user"]
 	if !ok {
 		return nil, nil
@@ -98,7 +100,7 @@ func authenticate(c echo.Context) (*User, error) {
 	if !ok {
 		return nil, errors.New("Illegal session state")
 	}
-	user = LookupId(data.Id)
+	user = db.LookupHexId(data.Id)
 	if user == nil {
 		return nil, nil
 	}
@@ -112,9 +114,13 @@ func postLogin(c echo.Context) error {
 	username := c.FormValue("username")
 	password := c.FormValue("password")
 
-	user, err := Login(username, password)
+	user, err := db.Login(username, password)
 	if err != nil {
 		return err
+	}
+
+	if user == nil {
+		return c.Redirect(http.StatusSeeOther, "/login")
 	}
 
 	session, err := store.Get(r, "session")
@@ -124,7 +130,7 @@ func postLogin(c echo.Context) error {
 
 	session.Options.MaxAge = 86400 * 7 // one week
 	data := &sessionData{
-		Id: user.Id,
+		Id: user.Id.Hex(),
 	}
 	
 	session.Values["user"] = data
@@ -158,7 +164,7 @@ func logout(c echo.Context) error {
 	return c.Redirect(http.StatusSeeOther, "/")
 }
 
-func forbidden(c echo.Context) (*User, error) {
+func forbidden(c echo.Context) (*db.User, error) {
 	u, err := authenticate(c)
 	if err != nil {
 		return nil, err
@@ -181,13 +187,14 @@ func upload(c echo.Context) error {
 		return err
 	}
 
-	//TODO: validate group is ok
+	// validate group is ok
 	group := r.PostFormValue("group")
-	_ = group
-	_ = u
+	if !u.PartOf(group) {
+		return c.NoContent(http.StatusForbidden)
+	}
 
 	parts := r.MultipartForm.File["file"]
-	//TODO: make sure name is cleaned 
+	//TODO: make sure name is clean(?)
 	name := parts[0].Filename
 
 	file, err := os.Create(path.Join("files", name))
@@ -224,7 +231,7 @@ func mkdir(c echo.Context) error {
 	mkdirName := r.PostFormValue("name")
 	mkdirGroup := r.PostFormValue("group")
 
-	meta, err := ReadMeta(mkdirBase)
+	meta, err := files.ReadMeta(mkdirBase)
 	if err != nil {
 		return err
 	}
@@ -236,7 +243,7 @@ func mkdir(c echo.Context) error {
 
 	//TODO: make sure name does not exist
 	fullPath := path.Join(mkdirBase, mkdirName)
-	newPath, err := Mkdir(fullPath, mkdirGroup)
+	newPath, err := files.Mkdir(fullPath, mkdirGroup)
 	if err != nil {
 		return err
 	}
@@ -256,7 +263,7 @@ func download(c echo.Context) error {
 	child = child[1:]
 	filename := path.Base(child)
 	dir := path.Dir(child)
-	meta, err := ReadMeta(dir)
+	meta, err := files.ReadMeta(dir)
 	if err != nil {
 		return err
 	}
@@ -285,9 +292,9 @@ func redirect(to string) (func(echo.Context) error) {
 }
 
 // produces auth lambda
-func auth(group string, proc func(*User, echo.Context) error) (func(echo.Context) error) {
+func auth(group string, proc func(*db.User, echo.Context) error) (func(echo.Context) error) {
 	return func(c echo.Context) error {
-		var user *User
+		var user *db.User
 		var err error
 
 		if group == AnyGroup {
@@ -307,14 +314,14 @@ func auth(group string, proc func(*User, echo.Context) error) (func(echo.Context
 	}
 }
 
-func render(template string, makeState func(*User, echo.Context) *renderState) (func(*User, echo.Context) error) {
-	return func(user *User, c echo.Context) error {
+func render(template string, makeState func(*db.User, echo.Context) *renderState) (func(*db.User, echo.Context) error) {
+	return func(user *db.User, c echo.Context) error {
 		state := makeState(user, c)
 		return c.Render(http.StatusOK, template, state)
 	}
 }
 
-func defaultState(user *User, c echo.Context) *renderState {
+func defaultState(user *db.User, c echo.Context) *renderState {
 	return &renderState{
 		User: user,
 		Path: "",
@@ -323,7 +330,7 @@ func defaultState(user *User, c echo.Context) *renderState {
 	}
 }
 
-func mkdirState(user *User, c echo.Context) *renderState {
+func mkdirState(user *db.User, c echo.Context) *renderState {
 	child := c.QueryParam("path")
 	if child == "" {
 		child = "/"
@@ -336,10 +343,10 @@ func mkdirState(user *User, c echo.Context) *renderState {
 	}
 }
 
-func filesState(user *User, c echo.Context) *renderState {
+func filesState(user *db.User, c echo.Context) *renderState {
 	child := c.Request().URL.EscapedPath()[1:]
 	parent := path.Dir(child)
-	entries, file := readFiles(child)
+	entries, file := files.ReadFiles(child)
 	return &renderState{
 		User: user,
 		Path: "/" + child,
@@ -349,16 +356,34 @@ func filesState(user *User, c echo.Context) *renderState {
 	}
 }
 
+func assert(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+var debug = false
+
+func init() {
+	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
+	flag.Parse()
+}
+
 func main() {
 	gob.Register(&sessionData{})
-	Register("asdf", "qwer", []string{"admin", "user", "any"})
-
 	e := echo.New()
 
-	middleware.DefaultLoggerConfig.Format = 
-		"${time_rfc3339} ${method}: ${uri} ${error}\n"
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+	assert(db.Connect())
+	defer func() {
+		assert(db.Disconnect())
+	}()
+
+	if !debug {
+		middleware.DefaultLoggerConfig.Format = 
+			"${time_rfc3339} ${method}: ${uri} ${error}\n"
+		e.Use(middleware.Logger())
+		e.Use(middleware.Recover())
+	}
 
 	e.Static("/static", "static")
 
@@ -376,12 +401,14 @@ func main() {
 	e.POST("/upload", upload)
 	e.POST("/mkdir", mkdir)
 
+	hotReload := !debug
+
 	e.Renderer = NewRenderer([]string{
 		"login.html",
 		"index.html",
 		"upload.html",
 		"profile.html",
-	}, true)
+	}, hotReload)
 
 	e.Logger.Fatal(e.Start(":8080"))
 }

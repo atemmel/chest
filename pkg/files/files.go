@@ -1,4 +1,4 @@
-package main
+package files
 
 import (
 	"encoding/json"
@@ -18,14 +18,14 @@ type ChestMeta struct {
 	Group string `json:"group"`
 }
 
-type fileEntry struct {
+type Entry struct {
 	Name string
 	Size string
 	Mime string
 	IsDir bool
 }
 
-type byType []fileEntry
+type byType []Entry
 
 func (s byType) Len() int {
 	return len(s)
@@ -56,7 +56,7 @@ func getMime(fullPath string) string {
 	return mime
 }
 
-func readFiles(where string) ([]fileEntry, *fileEntry) {
+func ReadFiles(where string) ([]Entry, *Entry) {
 	prefix := HostDir
 	if strings.HasPrefix(where, prefix) {
 		prefix = ""
@@ -66,17 +66,17 @@ func readFiles(where string) ([]fileEntry, *fileEntry) {
 	if err != nil {
 		info, err := os.Stat(fullPath)
 		if err != nil {
-			return []fileEntry{}, nil
+			return []Entry{}, nil
 		}
-		return []fileEntry{}, &fileEntry{
+		return []Entry{}, &Entry{
 			Name: info.Name(),
 			IsDir: false,
 			Mime: getMime(fullPath),
 		}
 	}
-	entries := make([]fileEntry, len(files))
+	entries := make([]Entry, len(files))
 	for i, f := range files {
-		entries[i] = fileEntry{
+		entries[i] = Entry{
 			Name: f.Name(),
 			IsDir: f.IsDir(),
 			Mime: "directory",
