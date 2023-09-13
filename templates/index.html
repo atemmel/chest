@@ -10,7 +10,7 @@
       {{ if .User }}
         {{ if .File }}
           <div class="file-navigation">
-            {{ .Path }}
+            {{ slice .Path 12 }}
           </div>
           <div class="action-bar">
             <div class="action-item" aria-description="Go back">
@@ -29,14 +29,14 @@
               {{ .File.Mime }}
             </div>
             <div>
-              <a href="/download?path={{ .Path }}">
+              <a href="/chest/download?path={{ .Path }}">
                 Download
               </a>
             </div>
           </div>
         {{ else }}
           <div class="file-navigation">
-            {{ .Path }}/
+            {{ slice .Path 12}}/
           </div>
           <div class="action-bar">
             {{ if ne .ParentPath "/." }}
@@ -49,7 +49,7 @@
               </div>
             {{ end }}
             <div class="action-item" aria-description="New Folder">
-              <a href="/mkdir?path={{.Path}}">
+              <a href="/chest/mkdir?path={{.Path}}">
                 <div>
                   New Folder
                 </div>
@@ -70,7 +70,7 @@
                 <a href="{{ $Path }}/{{ $f.Name }}">
                   <div class="grid-element-text-icon">
                     {{ if $f.IsDir }}
-                        📁
+                      📁
                     {{ else }}
                       📄
                     {{ end }}

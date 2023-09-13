@@ -1,21 +1,16 @@
 {{ define "header" }}
 <header>
   <nav>
-    <a href="/">
+    <a href="/chest/">
       <div class="nav-element">
         Chest
       </div>
     </a>
     {{if .User}}
     <div class="nav-right">
-      <a href="/upload">
+      <a href="/chest/profile">
         <div class="nav-element">
-          Upload
-        </div>
-      </a>
-      <a href="/profile">
-        <div class="nav-element">
-          Profile
+          {{ .User.Username }}
         </div>
       </a>
     </div>

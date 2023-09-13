@@ -7,14 +7,22 @@
   <body>
     {{ template "header" .}}
     <main>
-      <form action="mkdir" method="POST">
-        <input type="hidden" name="base" value="{{.Path}}">
+      <form action="/chest/mkdir" method="POST">
+        <input type="hidden" name="base" value="{{slice .Path 12}}">
         <div>
           <input type="text" name="name" placeholder="Folder name">
         </div>
         <div>
-          Owning group:
-          <select name="group">
+          Readable group:
+          <select name="read-group">
+            {{ range $group := .User.Groups }}
+              <option value="{{$group}}">{{$group}}</option>
+            {{ end }}
+          </select>
+        </div>
+        <div>
+          Writeable group:
+          <select name="write-group">
             {{ range $group := .User.Groups }}
               <option value="{{$group}}">{{$group}}</option>
             {{ end }}

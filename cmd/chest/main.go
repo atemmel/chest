@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
@@ -22,10 +23,7 @@ import (
 var mySecret = []byte("secret")
 
 const (
-	AdminGroup = "admin"
-	UserGroup = "user"
-	AnyGroup = ""
-
+	root = "/chest";
 	templateDir = "templates/"
 	partsDir = "templates/parts/"
 )
@@ -121,7 +119,7 @@ func postLogin(c echo.Context) error {
 	}
 
 	if user == nil {
-		return c.Redirect(http.StatusSeeOther, "/login")
+		return c.Redirect(http.StatusSeeOther, root + "/login")
 	}
 
 	session, err := store.Get(r, "session")
@@ -140,7 +138,7 @@ func postLogin(c echo.Context) error {
 		return err
 	}
 
-	return c.Redirect(http.StatusSeeOther, "/")
+	return c.Redirect(http.StatusSeeOther, root + "/")
 }
 
 func logout(c echo.Context) error {
@@ -162,7 +160,7 @@ func logout(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.Redirect(http.StatusSeeOther, "/")
+	return c.Redirect(http.StatusSeeOther, root + "/")
 }
 
 func forbidden(c echo.Context) (*db.User, error) {
@@ -219,7 +217,7 @@ func upload(c echo.Context) error {
 			return err
 		}
 	}
-	return c.Redirect(http.StatusSeeOther, "/upload")
+	return c.Redirect(http.StatusSeeOther, root + "/upload")
 }
 
 func mkdir(c echo.Context) error {
@@ -230,25 +228,31 @@ func mkdir(c echo.Context) error {
 	r := c.Request()
 	mkdirBase := r.PostFormValue("base")
 	mkdirName := r.PostFormValue("name")
-	mkdirGroup := r.PostFormValue("group")
+	mkdirReadGroup := r.PostFormValue("read-group")
+	mkdirWriteGroup := r.PostFormValue("write-group")
 
+	if !strings.HasPrefix(mkdirBase, "/files") {
+		mkdirBase = "files" + mkdirBase
+	}
+
+	fmt.Println(mkdirBase)
 	meta, err := files.ReadMeta(mkdirBase)
 	if err != nil {
 		return err
 	}
 
 	// make sure user is allowed to create
-	if !u.PartOf(meta.Group) {
+	if !u.PartOf(meta.WriteGroup) {
 		return c.NoContent(http.StatusForbidden)
 	}
 
 	//TODO: make sure name does not exist
 	fullPath := path.Join(mkdirBase, mkdirName)
-	newPath, err := files.Mkdir(fullPath, mkdirGroup)
+	newPath, err := files.Mkdir(fullPath, mkdirReadGroup, mkdirWriteGroup)
 	if err != nil {
 		return err
 	}
-	return c.Redirect(http.StatusSeeOther, "/" + newPath)
+	return c.Redirect(http.StatusSeeOther, root + "/" + newPath)
 }
 
 func download(c echo.Context) error {
@@ -257,11 +261,11 @@ func download(c echo.Context) error {
 		return err
 	}
 	child := c.QueryParam("path")
-	if child == "" {
+	if len(child) <= len(root) {
 		return c.NoContent(http.StatusNotFound)
 
 	}
-	child = child[1:]
+	child = child[len(root)+1:]
 	filename := path.Base(child)
 	dir := path.Dir(child)
 	meta, err := files.ReadMeta(dir)
@@ -270,7 +274,7 @@ func download(c echo.Context) error {
 	}
 
 	// make sure user is allowed to download
-	if !u.PartOf(meta.Group) {
+	if !u.PartOf(meta.ReadGroup) {
 		return c.NoContent(http.StatusForbidden)
 	}
 
@@ -280,7 +284,7 @@ func download(c echo.Context) error {
 func login(c echo.Context) error {
 	user, _ := authenticate(c)
 	if user != nil {
-		return c.Redirect(http.StatusSeeOther, "/files")
+		return c.Redirect(http.StatusSeeOther, root + "/files")
 	}
 	return c.Render(http.StatusOK, "login.html", nil)
 }
@@ -298,13 +302,13 @@ func auth(group string, proc func(*db.User, echo.Context) error) (func(echo.Cont
 		var user *db.User
 		var err error
 
-		if group == AnyGroup {
+		if group == db.AnyGroup {
 			goto OK
 		}
 
 		user, err = authenticate(c)
 		if err != nil || user == nil {
-			return c.Redirect(http.StatusSeeOther, "/login")
+			return c.Redirect(http.StatusSeeOther, root + "/login")
 		}
 		if !user.PartOf(group) {
 			return c.NoContent(http.StatusForbidden)
@@ -345,13 +349,13 @@ func mkdirState(user *db.User, c echo.Context) *renderState {
 }
 
 func filesState(user *db.User, c echo.Context) *renderState {
-	child := c.Request().URL.EscapedPath()[1:]
+	child := c.Request().URL.EscapedPath()[len(root) + 1:]
 	parent := path.Dir(child)
 	entries, file := files.ReadFiles(child)
 	return &renderState{
 		User: user,
-		Path: "/" + child,
-		ParentPath: "/" + parent,
+		Path: root + "/" + child,
+		ParentPath: root + "/" + parent,
 		Entries: entries,
 		File: file,
 	}
@@ -372,35 +376,39 @@ func init() {
 
 func main() {
 	gob.Register(&sessionData{})
+
 	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
 
 	assert(db.Connect())
 	defer func() {
 		assert(db.Disconnect())
 	}()
 
-	if !debug {
-		middleware.DefaultLoggerConfig.Format = 
-			"${time_rfc3339} ${method}: ${uri} ${error}\n"
-		e.Use(middleware.Logger())
-		e.Use(middleware.Recover())
-	}
+	middleware.DefaultLoggerConfig.Format = 
+		"${time_rfc3339} ${method}: ${uri} ${error}\n"
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 
-	e.Static("/static", "static")
+	chest := e.Group("/chest")
 
-	e.GET("/", redirect("/files"))
-	e.GET("/files", auth(UserGroup, render("index.html", filesState)))
-	e.GET("/files/*", auth(UserGroup, render("index.html", filesState)))
-	e.GET("/upload", auth(UserGroup, render("upload.html", defaultState)))
-	e.GET("/profile", auth(UserGroup, render("profile.html", defaultState)))
-	e.GET("/mkdir", auth(UserGroup, render("mkdir.html", mkdirState)));
-	e.GET("/download", download);
+	chest.Static("/static", "static")
 
-	e.GET("/login", login);
-	e.POST("/login", postLogin)
-	e.POST("/logout", logout)
-	e.POST("/upload", upload)
-	e.POST("/mkdir", mkdir)
+	chest.GET("", redirect(root + "/files"))
+	chest.GET("/", redirect(root + "/files"))
+	chest.GET("/files", auth(db.UserGroup, render("index.html", filesState)))
+	chest.GET("/files/*", auth(db.UserGroup, render("index.html", filesState)))
+	chest.GET("/upload", auth(db.UserGroup, render("upload.html", defaultState)))
+	chest.GET("/profile", auth(db.UserGroup, render("profile.html", defaultState)))
+	chest.GET("/mkdir", auth(db.UserGroup, render("mkdir.html", mkdirState)));
+	chest.GET("/download", download);
+
+	chest.GET("/login", login);
+	chest.POST("/login", postLogin)
+	chest.POST("/logout", logout)
+	chest.POST("/upload", upload)
+	chest.POST("/mkdir", mkdir)
 
 	hotReload := debug
 	fmt.Println("Hot-reload is:", hotReload)

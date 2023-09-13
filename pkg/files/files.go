@@ -15,7 +15,8 @@ const (
 )
 
 type ChestMeta struct {
-	Group string `json:"group"`
+	ReadGroup string `json:"readGroup"`
+	WriteGroup string `json:"writeGroup"`
 }
 
 type Entry struct {
@@ -101,28 +102,26 @@ func ReadMeta(folder string) (*ChestMeta, error) {
 	return meta, nil
 }
 
-func Mkdir(name string, group string) (string, error) {
-	if !strings.HasPrefix(name, "/" + HostDir) {
-		name = path.Join(HostDir, name)
-	} else {
-		name = name[1:]
-	}
+func Mkdir(name, read, write string) (string, error) {
 	err := os.Mkdir(name, 0755)
 	if err != nil {
 		return "", err
 	}
 
 	meta := &ChestMeta{
-		Group: group,
+		ReadGroup: read,
+		WriteGroup: write,
 	}
 	
 	bytes, err := json.Marshal(meta)
 	if err != nil {
 		return "", err
 	}
-	err = os.WriteFile(path.Join(name, MetaFile), bytes, 0644)
+
+	file := name + "/" + MetaFile
+	err = os.WriteFile(file, bytes, 0644)
 	if err != nil {
 		return "", err
 	}
-	return name, os.Mkdir(name, 0755)
+	return name, nil
 }
