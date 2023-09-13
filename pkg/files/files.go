@@ -75,8 +75,11 @@ func ReadFiles(where string) ([]Entry, *Entry) {
 			Mime: getMime(fullPath),
 		}
 	}
-	entries := make([]Entry, len(files))
+	entries := make([]Entry, len(files) - 1)
 	for i, f := range files {
+		if f.Name() == MetaFile {
+			continue;
+		}
 		entries[i] = Entry{
 			Name: f.Name(),
 			IsDir: f.IsDir(),
