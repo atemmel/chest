@@ -39,11 +39,49 @@ func createUser() {
 	fmt.Println("OK: new user with id", id, "created")
 }
 
+func help() {
+	fmt.Println(
+`  chest-cli
+
+   useradd - adds a user
+`)
+}
+
+var (
+	mode = ""
+)
+
+func init() {
+	args := os.Args
+	if len(args) > 1 {
+		mode = args[1]
+	}
+}
+
 func main() {
 	assert(db.Connect())
 	defer func() {
 		assert(db.Disconnect())
 	}()
-	//createUser()
-	fmt.Println(db.LookupHexId("64fdfa398fac7f1aff66dc30"))
+
+	switch mode {
+	case "useradd":
+		createUser()
+	case "-h":
+		fallthrough
+	case "help":
+		fallthrough
+	case "-help":
+		fallthrough
+	case "--help":
+		help()
+		return
+	case "":
+		fmt.Println("No command specified, exiting...")
+		return
+	default:
+		fmt.Printf("Unknown command '%s', exiting...\n" , mode)
+		return
+	}
+	//fmt.Println(db.LookupHexId("64fdfa398fac7f1aff66dc30"))
 }
