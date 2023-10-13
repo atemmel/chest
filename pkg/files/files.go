@@ -75,16 +75,16 @@ func ReadFiles(where string) ([]Entry, *Entry) {
 			Mime: getMime(fullPath),
 		}
 	}
-	entries := make([]Entry, len(files) - 1)
-	for i, f := range files {
+	entries := make([]Entry, 0, len(files) - 1)
+	for _, f := range files {
 		if f.Name() == MetaFile {
 			continue;
 		}
-		entries[i] = Entry{
+		entries = append(entries, Entry{
 			Name: f.Name(),
 			IsDir: f.IsDir(),
 			Mime: "directory",
-		}
+		})
 	}
 	sort.Sort(byType(entries))
 	return entries, nil

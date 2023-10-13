@@ -192,11 +192,14 @@ func upload(c echo.Context) error {
 		return c.NoContent(http.StatusForbidden)
 	}
 
+	base := r.PostFormValue("base")
 	parts := r.MultipartForm.File["file"]
 	//TODO: make sure name is clean(?)
 	name := parts[0].Filename
+	//TODO: make sure file exists
+	fullpath := path.Join("files", base, name)
 
-	file, err := os.Create(path.Join("files", name))
+	file, err := os.Create(fullpath)
 	if err != nil {
 		return err
 	}
@@ -217,7 +220,9 @@ func upload(c echo.Context) error {
 			return err
 		}
 	}
-	return c.Redirect(http.StatusSeeOther, root + "/upload")
+
+	redirect := path.Join(root, "/files", base)
+	return c.Redirect(http.StatusSeeOther, redirect)
 }
 
 func mkdir(c echo.Context) error {
@@ -235,7 +240,6 @@ func mkdir(c echo.Context) error {
 		mkdirBase = "files" + mkdirBase
 	}
 
-	fmt.Println(mkdirBase)
 	meta, err := files.ReadMeta(mkdirBase)
 	if err != nil {
 		return err
@@ -348,8 +352,22 @@ func mkdirState(user *db.User, c echo.Context) *renderState {
 	}
 }
 
+func uploadState(user *db.User, c echo.Context) *renderState {
+	child := c.QueryParam("path")
+	if child == "" {
+		child = "/"
+	}
+	return &renderState{
+		User: user,
+		Path: child,
+		Entries: nil,
+		File: nil,
+	}
+}
+
 func filesState(user *db.User, c echo.Context) *renderState {
-	child := c.Request().URL.EscapedPath()[len(root) + 1:]
+	child := c.Request().URL.EscapedPath()
+	child = child[len(root) + 1:]
 	parent := path.Dir(child)
 	entries, file := files.ReadFiles(child)
 	return &renderState{
@@ -399,7 +417,7 @@ func main() {
 	chest.GET("/", redirect(root + "/files"))
 	chest.GET("/files", auth(db.UserGroup, render("index.html", filesState)))
 	chest.GET("/files/*", auth(db.UserGroup, render("index.html", filesState)))
-	chest.GET("/upload", auth(db.UserGroup, render("upload.html", defaultState)))
+	chest.GET("/upload", auth(db.UserGroup, render("upload.html", uploadState)))
 	chest.GET("/profile", auth(db.UserGroup, render("profile.html", defaultState)))
 	chest.GET("/mkdir", auth(db.UserGroup, render("mkdir.html", mkdirState)));
 	chest.GET("/download", download);

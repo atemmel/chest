@@ -7,9 +7,10 @@
   <body>
     {{ template "header" .}}
     <main>
-      <form action="upload" method="POST" enctype="multipart/form-data">
+      <form action="/chest/upload" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="base" value="{{slice .Path 12}}">
         <div>
-          <input type="text" name="name" placeholder="name">
+          <input type="text" name="name" placeholder="Filename">
         </div>
         <div>
           <input type="file" name="file">
@@ -17,7 +18,7 @@
         <div>
           <select name="group">
             {{ range $group := .User.Groups }}
-            <option value="{{$group}}">{{$group}}</option>
+              <option value="{{$group}}">{{$group}}</option>
             {{ end }}
           </select>
         </div>
