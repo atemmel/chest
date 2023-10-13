@@ -44,7 +44,7 @@ func (u *User) PartOf(group string) bool {
 
 var client *mongo.Client = nil
 
-func coll() *mongo.Collection {
+func collection() *mongo.Collection {
 	return client.Database("chest").Collection("users")
 }
 
@@ -74,7 +74,7 @@ func Lookup(username string) *User {
 	user := &User{}
 	ctx, cancel := timeout(5)
 	defer cancel()
-	err := coll().FindOne(ctx, bson.D{{Key: "username", Value: username}}).Decode(user)
+	err := collection().FindOne(ctx, bson.D{{Key: "username", Value: username}}).Decode(user)
 	if err != nil {
 		return nil
 	}
@@ -86,7 +86,7 @@ func LookupId(id primitive.ObjectID) *User {
 	u := &User{}
 	ctx, cancel := timeout(5)
 	defer cancel()
-	err := coll().FindOne(ctx, j).Decode(u)
+	err := collection().FindOne(ctx, j).Decode(u)
 	if err != nil {
 		return nil
 	}
@@ -102,7 +102,7 @@ func LookupHexId(id string) *User {
 }
 
 func Insert(u *createUser) string {
-	c := coll()
+	c := collection()
 	ctx, cancel := timeout(5)
 	defer cancel()
 	result, err := c.InsertOne(ctx, u)
@@ -165,4 +165,28 @@ func Login(username, password string) (*User, error) {
 	}
 
 	return u, nil
+}
+
+func Delete(username string) (int64, error) {
+	c := collection()
+	ctx, cancel := timeout(5)
+	defer cancel()
+	filter := bson.D{{Key: "username", Value: username}}
+	result, err := c.DeleteOne(ctx, filter)
+	return result.DeletedCount, err
+}
+
+func List() ([]User, error) {
+	c := collection()
+	ctx, cancel := timeout(5)
+	defer cancel()
+	filter := bson.D{}
+	opts := options.Find().SetSort(bson.D{{Key: "name", Value: 1}})
+	result, err := c.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	users := []User{}
+	err = result.All(ctx, &users)
+	return users, nil
 }

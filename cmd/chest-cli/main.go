@@ -16,7 +16,7 @@ func assert(err error) {
 	}
 }
 
-func createUser() {
+func addUser() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Username?:")
 	user, _ := reader.ReadString('\n')
@@ -39,22 +39,47 @@ func createUser() {
 	fmt.Println("OK: new user with id", id, "created")
 }
 
+func deleteUser() {
+	if arg1 == "" {
+		fmt.Println("Error: user to delete not specified")
+		return
+	}
+
+	count, err := db.Delete(arg1)
+	assert(err)
+	fmt.Println("OK: deleted", count, " users with name", arg1)
+}
+
+func listUser() {
+	users, err := db.List()
+	assert(err)
+
+	for _, u := range users {
+		fmt.Println(u.Username)
+	}
+}
+
 func help() {
 	fmt.Println(
 `  chest-cli
 
    useradd - adds a user
+   userdel <name> - deletes user with name <name>
 `)
 }
 
 var (
 	mode = ""
+	arg1 = ""
 )
 
 func init() {
 	args := os.Args
 	if len(args) > 1 {
 		mode = args[1]
+	}
+	if len(args) > 2 {
+		arg1 = args[2]
 	}
 }
 
@@ -66,7 +91,11 @@ func main() {
 
 	switch mode {
 	case "useradd":
-		createUser()
+		addUser()
+	case "userdel":
+		deleteUser()
+	case "userlist":
+		listUser()
 	case "-h":
 		fallthrough
 	case "help":
