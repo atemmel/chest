@@ -20,12 +20,12 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
-var mySecret = []byte("secret")
+var mySecret []byte
 
 const (
 	root = "/chest";
 	templateDir = "templates/"
-	partsDir = "templates/parts/"
+	partsDir = templateDir + "parts/"
 )
 
 type sessionData struct {
@@ -48,14 +48,18 @@ type renderState struct {
 }
 
 func NewRenderer(files []string, hotReload bool) *renderer {
-	parts, err := filepath.Glob(partsDir + "*.html")
+	parts, err := filepath.Glob(path.Join(resourceRoot, partsDir) + "/*.html")
 	if err != nil {
 		panic(err)
+	}
+	if len(parts) == 0 {
+		fmt.Println("Could not find parts, exiting...")
+		os.Exit(1)
 	}
 	pages := make([]string, 0, len(files) + len(parts))
 	pages = append(pages, parts...)
 	for _, f := range files {
-		p := path.Join(templateDir, f)
+		p := path.Join(resourceRoot, templateDir, f)
 		pages = append(pages, p)
 	}
 	
@@ -71,11 +75,11 @@ func (r *renderer) Render(w io.Writer, name string, data interface{}, c echo.Con
 		return r.templates.ExecuteTemplate(w, name, data)
 	}
 
-	parts, err := filepath.Glob(partsDir + "*.html")
+	parts, err := filepath.Glob(path.Join(resourceRoot, partsDir) + "/*.html")
 	if err != nil {
 		return err
 	}
-	parts = append(parts, templateDir + name)
+	parts = append(parts, path.Join(resourceRoot, templateDir, name))
 
 	tpl, err := template.ParseFiles(parts...)
 	if err != nil {
@@ -386,14 +390,27 @@ func assert(err error) {
 }
 
 var debug = false
+var fsRoot = ""
+var resourceRoot = ""
 
 func init() {
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
+	flag.StringVar(&fsRoot, "fs", "", "Set root of hosted filesystem")
+	flag.StringVar(&resourceRoot, "res", "", "Set resource root")
 	flag.Parse()
 }
 
 func main() {
 	gob.Register(&sessionData{})
+
+	{
+		secret, b := os.LookupEnv("chest_cookie_secret")
+		if !b {
+			fmt.Println("Cookie secret not set, exiting...")
+			os.Exit(1)
+		}
+		mySecret = []byte(secret)
+	}
 
 	e := echo.New()
 	e.HideBanner = true
@@ -411,7 +428,7 @@ func main() {
 
 	chest := e.Group("/chest")
 
-	chest.Static("/static", "static")
+	chest.Static("/static", resourceRoot + "/static")
 
 	chest.GET("", redirect(root + "/files"))
 	chest.GET("/", redirect(root + "/files"))
